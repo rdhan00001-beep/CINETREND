@@ -1,0 +1,6 @@
+{
+  "name": "Sistem Rekomendasi Film Berbasis Tren",
+  "description": "Sistem rekomendasi film berbasis tren global, mencocokkan genre pilihan Anda dengan jutaan data rating untuk merekomendasikan tontonan terbaik.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

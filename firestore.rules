@@ -1,0 +1,66 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Catch-all default deny to secure any unspecified collections
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions for auth verification
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    // 1. Users Collection Rules
+    match /users/{userId} {
+      // Users can only read and modify their own user profile document
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId) 
+        && request.resource.data.uid == request.auth.uid;
+      allow update: if isOwner(userId) 
+        && request.resource.data.uid == request.auth.uid;
+      allow delete: if false; // Profiles shouldn't be deleted easily
+    }
+
+    // 2. Bookmarks Collection Rules
+    match /bookmarks/{bookmarkId} {
+      // Users can list and read their own bookmarked movies
+      allow read: if isSignedIn() && (
+        resource == null || resource.data.userId == request.auth.uid
+      );
+      
+      // Users can create a bookmark if the owner field is their own UID
+      allow create: if isSignedIn() && (
+        request.resource.data.userId == request.auth.uid
+      );
+      
+      // Users can update or delete their own bookmarks
+      allow update, delete: if isSignedIn() && (
+        resource.data.userId == request.auth.uid
+      );
+    }
+
+    // 3. Watched Collection Rules
+    match /watched/{watchedId} {
+      // Users can list and read their own watched movies list
+      allow read: if isSignedIn() && (
+        resource == null || resource.data.userId == request.auth.uid
+      );
+      
+      // Users can create a watched status entry if the owner field is their own UID
+      allow create: if isSignedIn() && (
+        request.resource.data.userId == request.auth.uid
+      );
+      
+      // Users can update or delete their own watched entries
+      allow update, delete: if isSignedIn() && (
+        resource.data.userId == request.auth.uid
+      );
+    }
+  }
+}
