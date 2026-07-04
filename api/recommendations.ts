@@ -2,6 +2,27 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { GoogleGenAI, Type } from "@google/genai";
 import { FALLBACK_DATABASE } from "../src/fallbackDatabase";
 
+function getFallbackMovies(genreKey: string): any[] {
+  const pool = FALLBACK_DATABASE[genreKey] || FALLBACK_DATABASE["drama"];
+  // Shuffle and select exactly 5 unique movies
+  const shuffled = [...pool].sort(() => 0.5 - Math.random());
+  const selected = shuffled.slice(0, 5);
+
+  // Apply slight live metric variations (+/- 2%) to simulate real-time live-updating ratings
+  return selected.map((movie, index) => {
+    const jitter = Math.floor(Math.random() * 5) - 2; // -2 to +2
+    const popularityScore = Math.min(100, Math.max(70, movie.popularityScore + jitter));
+    const ratingPercentage = Math.min(100, Math.max(70, movie.ratingPercentage + jitter));
+    
+    return {
+      ...movie,
+      popularityScore,
+      ratingPercentage,
+      id: `${movie.id}_rec_${Date.now()}_${index}` // ensure fresh, unique keys to trigger animation updates
+    };
+  });
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // CORS Headers
   res.setHeader("Access-Control-Allow-Credentials", "true");
@@ -33,7 +54,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (!apiKey || apiKey === "MY_GEMINI_API_KEY" || apiKey.trim() === "") {
       console.log(`[VERCEL API] No Gemini API key detected. Using fallback database for: ${genre}`);
-      const fallbackMovies = FALLBACK_DATABASE[normalizedGenre] || FALLBACK_DATABASE["drama"];
+      const fallbackMovies = getFallbackMovies(normalizedGenre);
       return res.status(200).json({
         source: "global_trend_database_offline",
         genre: genre,
@@ -51,10 +72,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     });
 
+    const timestampSeed = Date.now();
     const prompt = `
       You are a highly advanced movie recommendation engine connected to a database of global movie ratings, containing over 50 million reviews from platforms like IMDb, Letterboxd, and Rotten Tomatoes.
       
       The user wants recommendations for the genre: "${genre}".
+      
+      Current Request Timestamp/Seed: ${timestampSeed}. 
+      To ensure the movie recommendation feed feels completely active, fresh, and live-updating, you MUST vary your selections. Do NOT return the exact same 5 movies if the user requests again. Select from a wide variety of highly rated classic and contemporary masterpieces in this genre.
       
       Provide exactly 5 highly-rated, popular, and currently trending movies in the genre "${genre}" (or closely matching it).
       Your recommendations should feel incredibly real, accurate, and include realistic rating metrics (IMDb-like rating out of 10, votes count representing millions of users, popularity scores, etc.).
@@ -120,17 +145,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       const parsedData = JSON.parse(textResponse);
       if (parsedData && Array.isArray(parsedData.movies) && parsedData.movies.length > 0) {
+        // Map unique postfixed IDs to guarantee fresh animation cycles
+        const moviesWithUniqueIds = parsedData.movies.map((m: any, idx: number) => ({
+          ...m,
+          id: `${m.id}_gemini_${timestampSeed}_${idx}`
+        }));
+
         return res.status(200).json({
           source: "gemini_trend_engine",
           genre: genre,
-          movies: parsedData.movies
+          movies: moviesWithUniqueIds
         });
       } else {
         throw new Error("Invalid structure from Gemini response");
       }
     } catch (geminiError) {
       console.error("[VERCEL API] Error calling Gemini API, falling back to local dataset:", geminiError);
-      const fallbackMovies = FALLBACK_DATABASE[normalizedGenre] || FALLBACK_DATABASE["drama"];
+      const fallbackMovies = getFallbackMovies(normalizedGenre);
       return res.status(200).json({
         source: "global_trend_database_fallback",
         genre: genre,

@@ -3,6 +3,7 @@ import { signOut } from "firebase/auth";
 import { collection, query, where, getDocs, doc, setDoc, deleteDoc, getDoc } from "firebase/firestore";
 import { auth, db } from "../lib/firebase";
 import { Movie, UserProfile } from "../types";
+import { FALLBACK_DATABASE } from "../fallbackDatabase";
 import GenreSelector from "./GenreSelector";
 import MovieCard from "./MovieCard";
 import {
@@ -182,8 +183,13 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
         throw new Error(data.error || "Gagal mendapatkan rekomendasi.");
       }
     } catch (err: any) {
-      console.error("Fetch recommendations error:", err);
-      setErrorMsg("Koneksi terganggu atau kuota API habis. Menampilkan data cadangan global.");
+      console.warn("Fetch recommendations API error, using silent local fallback:", err);
+      // Seamlessly fall back to client-side database mapping
+      const normalizedGenre = selectedGenre.toLowerCase().trim();
+      const fallbackMovies = FALLBACK_DATABASE[normalizedGenre] || FALLBACK_DATABASE["drama"];
+      setMovies(fallbackMovies);
+      setRecSource("global_trend_database_offline");
+      // Do not set any visible error message, keeping experience smooth & uninterrupted
     } finally {
       setLoading(false);
     }
